@@ -25,38 +25,39 @@ Domain Status Checker is a Python-based tool that automates the process of check
    
 2. Install the required packages:
    ```bash
-   
     pip install -r requirements.txt
     ```
-3. Configure the .config file:
-    Add the admin's phone number under phone_numbers.
-    Leave unavailable_domains empty (it will be updated automatically).
-    Update the DOMAINS_API variable in run.py with the API endpoint that provides the list of domains.
+3. Configure the `.env` file:
+   - Add the admin's phone number under `MELIPAYAMAK_PHONE`.
+   - Add the API endpoint that provides the list of domains under `DOMAINS_API`.
+   - Add the SMS sender phone number under `MELIPAYAMAK_PHONE`.
+   - Add the SMS API URL under `MELIPAYAMAK_API`.
+   - Add the list of domains to ignore under `IGNORE_DOMAINS`.
 
-4. Run the script:
+   Example `.env` file:
+   ```dotenv
+   MELIPAYAMAK_PHONE="50001234567890"
+   MELIPAYAMAK_API="https://example.com/api/send/simple/your-api-key"
+   DOMAINS_API="https://example.com/domains"
+   ADMIN_PHONE_NUMBERS=["09123456789"]
+   IGNORE_DOMAINS=["example.com", "test.com"]
+
+5. Run the script:
+```bash
     python run.py
-
-5. The script will:
+ ```
+6. The script will:
    Fetch the list of domains from the API.
    Check the availability of each domain.
    Log unreachable domains in the .config file.
    Send SMS notifications for unreachable domains.
-   Configuration
-   The .config file is used to store:
-       Admin phone numbers for SMS notifications.
-       A list of domains that are currently unreachable.
 
 Project Structure
-main.py: Contains the Checker class, which handles domain checking, configuration management, and SMS notifications.
-run.py: The entry point of the application. It initializes the Checker class and runs the periodic checks.
-.config: A JSON file used to store admin phone numbers and unreachable domains.
-License
-This project is licensed under the MIT License. See the LICENSE file for details.
+`main.py`: Contains the Checker class, which handles domain checking, configuration management, and SMS notifications.
+`run.py`: The entry point of the application. It initializes the Checker class and runs the periodic checks.
+`.config`: A JSON file used to store unreachable domains.
 
-
-Contributing
 Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
 
-
-Contact
+## Contact
 For any questions or issues, please contact the repository owner.
