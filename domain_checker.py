@@ -69,7 +69,7 @@ class DomainChecker:
                 response = await self._client.get(url)
                 # Consider any non-server-error (>=500) as 'working' for this check
                 # You might want stricter checks (e.g., only 2xx)
-                if response.status_code < 500:
+                if response.status_code < 400:
                     logger.debug(f"Domain {domain} ({url}) is reachable (Status: {response.status_code}).")
                     return True
                 else:

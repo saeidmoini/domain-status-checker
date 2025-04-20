@@ -77,23 +77,6 @@ async def main():
         await telegram_bot.application.updater.start_polling() # Start polling loop
         logger.info("Bot polling and job queue started.")
 
-        # Keep the main coroutine alive until shutdown is signaled
-        # run_polling usually does this, but with start/start_polling we need await asyncio.Event().wait()
-        # However, python-telegram-bot's signal handling in run_polling is convenient.
-        # Let's rethink: Sticking with run_polling() is simpler for graceful shutdown.
-        # The job queue runs within the same loop managed by run_polling.
-
-        # Correct Approach: Let run_polling manage the loop.
-        # The setup above (scheduling job, setting handlers) is correct.
-        # The run() method in TelegramBot class calls run_polling.
-
-        # So, the main part simplifies significantly:
-        # telegram_bot.run() # This will block and manage the loop
-
-        # HOWEVER, we want to close the httpx client gracefully on shutdown.
-        # run_polling doesn't easily allow async cleanup code AFTER it stops.
-        # So, we might need the more complex start/start_polling/await shutdown signal approach.
-
         # Let's try the complex way for proper cleanup:
         stop_event = asyncio.Event()
 
