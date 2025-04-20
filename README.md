@@ -1,14 +1,15 @@
 # Domain Status Checker
 
 ## Overview
-Domain Status Checker is a Python-based tool that automates the process of checking the availability of domains retrieved from an API. It identifies unreachable domains and sends SMS notifications to the admin's phone. The tool also maintains a record of domain statuses for future reference.
+Domain Status Checker is a Python-based tool that automates the process of checking the availability of domains retrieved from an API. It identifies unreachable domains and sends notifications to admins via Telegram. The tool also maintains a record of domain statuses for future reference.
 
 ## Features
 - Fetches a list of domains from a JSON API.
 - Checks the availability of each domain (HTTP status code < 400).
 - Logs unreachable domains (HTTP status code >= 400).
-- Sends SMS notifications to the admin for unreachable domains.
+- Sends Telegram notifications to admins for unreachable domains.
 - Periodically runs the checks and updates the status records.
+- Admin verification via phone number using Telegram bot.
 
 ## Requirements
 - Python 3.8 or higher
@@ -63,14 +64,14 @@ Logging:
 
 Logs are stored in the file specified in the .env file under LOG_FILE.
 
-## Project Structure
+### Project Structure
 domain_checker.py: Contains the Checker class, which handles domain checking, configuration management, and notifications.
 bot.py: Contains the TelegramBot class, which manages admin verification and notification delivery.
 run.py: The entry point of the application. It initializes the Checker and TelegramBot classes and runs the periodic checks.
 .env: Configuration file for environment variables.
 requirements.txt: Lists all the dependencies required for the project.
 
-### Contributions
+## Contributions
 Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
 
 ### Contact
