@@ -23,7 +23,7 @@ class Config:
         self.log_file = self._get_env_var('LOG_FILE', default='unreachable_domains.log')
 
         self.admin_phone_numbers = self._get_env_var_as_list('ADMIN_PHONE_NUMBERS')
-        self.ignore_domains = self._get_env_var_as_list('IGNORE_DOMAINS')
+        # self.ignore_domains = self._get_env_var_as_list('IGNORE_DOMAINS') # REMOVE THIS LINE
 
         # Ensure log directory exists
         log_dir = os.path.dirname(self.log_file)
@@ -34,7 +34,6 @@ class Config:
             except OSError as e:
                 logger.error(f"Failed to create log directory {log_dir}: {e}")
 
-
     def _get_env_var(self, var_name, converter=str, default=None, required=True):
         value = os.getenv(var_name, default)
         if required and value is None:
@@ -44,7 +43,7 @@ class Config:
                 return converter(value)
             except ValueError as e:
                  raise ConfigError(f"Invalid type for environment variable {var_name}: Expected {converter.__name__}. Error: {e}")
-        return None # Only reached if not required and no default
+        return None
 
     def _get_env_var_as_list(self, var_name, required=True):
         value_str = os.getenv(var_name)
@@ -54,17 +53,14 @@ class Config:
             else:
                 return []
         try:
-            # Attempt to parse the string as a JSON list
             parsed_list = json.loads(value_str)
             if not isinstance(parsed_list, list):
                 raise ValueError("Parsed JSON is not a list")
-            # Normalize phone numbers if it's the admin list
             if var_name == 'ADMIN_PHONE_NUMBERS':
                 return [self._normalize_phone(item) for item in parsed_list if isinstance(item, str)]
             else:
                 return [item for item in parsed_list if isinstance(item, str)]
         except (json.JSONDecodeError, ValueError) as e:
-            # Fallback: If JSON parsing fails, try splitting by comma (less robust)
             logger.warning(f"Could not parse {var_name} as JSON ('{value_str}'). Falling back to comma separation. Error: {e}. Please use JSON format like '[\"item1\", \"item2\"]' in .env for reliability.")
             items = [item.strip() for item in value_str.split(',') if item.strip()]
             if var_name == 'ADMIN_PHONE_NUMBERS':
@@ -75,13 +71,11 @@ class Config:
     def _normalize_phone(self, number: str) -> str:
         """Ensure phone number starts with +."""
         num = number.strip()
-        if num.isdigit(): # If it's just digits, assume local format needing '+'
+        if num.isdigit():
              logger.warning(f"Phone number '{number}' seems to be missing '+'. Add '+' in .env for clarity.")
-             # This assumption might be wrong depending on source data. Best to fix in .env
-             # return "+" + num # Potentially problematic - requires user to fix .env
-             return num # Return as is, but comparison might fail if admin numbers have '+'
+             return num
         if not num.startswith('+'):
-             return "+" + num # Add '+' if missing but has other chars
+             return "+" + num
         return num
 
 # Example usage (optional, for testing config loading)
@@ -93,7 +87,7 @@ if __name__ == "__main__":
         logger.info(f"  Bot Token: {'*' * 5}{config.telegram_bot_token[-4:]}")
         logger.info(f"  Domains API: {config.domains_api}")
         logger.info(f"  Admin Numbers: {config.admin_phone_numbers}")
-        logger.info(f"  Ignore Domains: {config.ignore_domains}")
+        # logger.info(f"  Ignore Domains: {config.ignore_domains}") # REMOVE OR COMMENT OUT THIS LINE
         logger.info(f"  Timeout: {config.timeout}")
         logger.info(f"  Check Cycle: {config.check_cycle}")
         logger.info(f"  Max Failures: {config.max_failures}")
