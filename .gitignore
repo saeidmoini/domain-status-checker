@@ -6,6 +6,7 @@ __pycache__/
 # C extensions
 *.so
 bot_persistence.pkl
+unreachable_domains.log
 # Distribution / packaging
 .Python
 build/

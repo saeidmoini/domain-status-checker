@@ -3,7 +3,8 @@ import logging
 from typing import Set, List
 import re
 import json
-import os # Add this import for os.path.exists
+import os
+import asyncio # New import for asyncio.Event
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
@@ -13,10 +14,12 @@ from telegram.ext import (
     filters,
     ApplicationBuilder,
     PicklePersistence,
+    JobQueue # New import
 )
 from telegram.constants import ParseMode
 
 from config import Config
+from domain_checker import DomainChecker # Import DomainChecker
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +40,20 @@ class TelegramBot:
         self.ignored_domains: Set[str] = self._load_ignored_domains()
 
         # State management for multi-step commands
-        # Maps chat_id to the state (e.g., ADD_DOMAIN_STATE, REMOVE_DOMAIN_STATE)
         self.user_states: dict[int, int] = {}
         logger.info("Initialized user_states for conversation management.")
+
+        self.domain_checker: DomainChecker = None # Will be set in main.py
+        self.domain_check_job_name = "Domain Check Cycle" # Consistent job name
 
     def load_admin_ids(self):
         self.admin_chat_ids: Set[int] = self.application.bot_data.setdefault('admin_chat_ids', set())
         logger.info(f"Loaded {len(self.admin_chat_ids)} admin chat IDs from persistence (after init).")
+
+    def set_domain_checker(self, checker: DomainChecker):
+        """Sets the DomainChecker instance for the bot to interact with."""
+        self.domain_checker = checker
+        logger.info("DomainChecker instance set in TelegramBot.")
 
     def _load_ignored_domains(self) -> Set[str]:
         """Loads ignored domains from a JSON file."""
@@ -225,14 +235,11 @@ class TelegramBot:
         user_state = self.user_states.get(chat_id)
 
         if not user_state:
-            # If there's no active state, just ignore this message or provide a default response
-            # await update.message.reply_text("I'm not expecting a domain right now. Use /ignore_add or /ignore_remove first.")
             logger.debug(f"Received unexpected message from {chat_id} with no active state.")
             return
 
         domain_input = update.message.text.strip().lower()
 
-        # Basic validation for domain format (can be improved)
         if not re.match(r"^[a-z0-9-]+\.[a-z0-9-.]+$", domain_input):
             await update.message.reply_text(
                 f"<code>{domain_input}</code> does not look like a valid domain format. Please try again or type /cancel to abort.",
@@ -258,7 +265,6 @@ class TelegramBot:
                 await update.message.reply_text(f"Domain <code>{domain_input}</code> removed from the ignore list.", parse_mode=ParseMode.HTML)
                 logger.info(f"Admin {update.effective_user.id} removed domain from ignore list: {domain_input}")
 
-        # Clear the state after processing the domain
         del self.user_states[chat_id]
         logger.info(f"Cleared state for chat_id {chat_id} after processing domain '{domain_input}'.")
 
@@ -272,18 +278,72 @@ class TelegramBot:
         else:
             await update.message.reply_text("No active operation to cancel.")
 
+    async def restart_checker_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """
+        Stops the current domain checker job, resets its state, and restarts it immediately.
+        """
+        if not await self._check_admin_permission(update):
+            return
+
+        chat_id = update.effective_chat.id
+        # Clear any ongoing state for this user
+        if chat_id in self.user_states:
+            del self.user_states[chat_id]
+            await update.message.reply_text("Previous operation cancelled.")
+
+        if not self.domain_checker:
+            await update.message.reply_text("Error: Domain checker is not initialized.")
+            logger.error("Attempted to restart checker, but domain_checker is None.")
+            return
+
+        await update.message.reply_text("🔄 Restarting domain checker. This may take a moment...")
+        logger.info(f"Admin {update.effective_user.id} initiated /restart_checker command.")
+
+        # 1. Signal the current job to stop
+        self.domain_checker.stop_event.set()
+        logger.info("Signaled domain checker's stop_event.")
+
+        # Give a short moment for the current job to pick up the signal and potentially finish its current iteration
+        # This is a best effort, not guaranteed immediate stop, but it prevents the job from starting new checks.
+        await asyncio.sleep(2)
+
+        # 2. Remove all existing domain check jobs
+        current_jobs = self.application.job_queue.get_jobs_by_name(self.domain_check_job_name)
+        if current_jobs:
+            for job in current_jobs:
+                job.schedule_removal()
+                logger.info(f"Removed existing job: {job.name} (Job ID: {job.id})")
+        else:
+            logger.info("No active domain check jobs found to remove.")
+
+        # 3. Reset the state of the domain checker
+        self.domain_checker.reset_state()
+        logger.info("Domain checker state reset.")
+
+        # 4. Reschedule the domain checker job to run immediately
+        self.application.job_queue.run_repeating(
+            self.domain_checker.check_domains_job,
+            interval=self.config.check_cycle,
+            first=1, # Run immediately
+            name=self.domain_check_job_name
+        )
+        logger.info(f"Rescheduled domain check job to run immediately and then every {self.config.check_cycle} seconds.")
+
+        await update.message.reply_text("✅ Domain checker restarted and will perform a full scan now. Unreachable domains list cleared.")
+
+
     def setup_handlers(self):
         """Adds command and message handlers to the application."""
         self.application.add_handler(CommandHandler("start", self.start_command))
-        self.application.add_handler(CommandHandler("cancel", self.cancel_command)) # New cancel command
+        self.application.add_handler(CommandHandler("cancel", self.cancel_command))
         self.application.add_handler(MessageHandler(filters.CONTACT, self.contact_handler))
 
         self.application.add_handler(CommandHandler("ignore_list", self.ignore_list_command))
-        self.application.add_handler(CommandHandler("ignore_add", self.ignore_add_command_start)) # Start the add flow
-        self.application.add_handler(CommandHandler("ignore_remove", self.ignore_remove_command_start)) # Start the remove flow
+        self.application.add_handler(CommandHandler("ignore_add", self.ignore_add_command_start))
+        self.application.add_handler(CommandHandler("ignore_remove", self.ignore_remove_command_start))
 
-        # This handler will catch any text message that is NOT a command
-        # and will only proceed if the user has an active state.
+        self.application.add_handler(CommandHandler("restart_checker", self.restart_checker_command)) # New handler
+
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_domain_input))
         logger.info("Telegram handlers set up.")
 

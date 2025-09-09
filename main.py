@@ -6,6 +6,7 @@ import sys
 from config import Config, ConfigError
 from domain_checker import DomainChecker
 from bot import TelegramBot
+from telegram.ext import JobQueue # Ensure JobQueue is imported
 
 # --- Logging Setup ---
 log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -31,20 +32,23 @@ async def main():
         logger.critical(f"Unexpected error loading configuration: {e}. Exiting.")
         sys.exit(1)
 
-
     telegram_bot = TelegramBot(config)
-    # Pass the method to get ignored domains from the bot to the domain checker
     domain_checker = DomainChecker(config, telegram_bot.send_notification_to_admins, telegram_bot.get_current_ignored_domains)
+
+    # Pass the domain_checker instance to the telegram_bot
+    telegram_bot.set_domain_checker(domain_checker)
 
     job_queue = telegram_bot.application.job_queue
 
+    # Initial scheduling of the domain check job
     job_queue.run_repeating(
         domain_checker.check_domains_job,
         interval=config.check_cycle,
-        first=10,
-        name="Domain Check Cycle"
+        first=10, # Run 10 seconds after bot start, so it doesn't conflict with bot startup messages
+        name=telegram_bot.domain_check_job_name # Use the consistent name
     )
-    logger.info(f"Scheduled domain check job to run every {config.check_cycle} seconds.")
+    logger.info(f"Scheduled initial domain check job to run every {config.check_cycle} seconds.")
+
 
     telegram_bot.setup_handlers()
 
